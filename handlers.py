@@ -20,15 +20,7 @@ async def start_cmd(msg: Message):
 async def new_profile(msg: Message):
     if msg.from_user.id not in ADMINS:
         return
-    await msg.answer("Invia 8 righe:
-Nome
-Età
-Città
-Nazionalità
-Date
-Disponibilità
-Preferenze
-WhatsApp")
+    await msg.answer("Invia 8 righe:\nNome\nEtà\nCittà\nNazionalità\nDate\nDisponibilità\nPreferenze\nWhatsApp")
     profiles[msg.from_user.id] = {"step": "text"}
 
 @router.message(F.text & F.from_user.id.in_(ADMINS))
@@ -36,12 +28,12 @@ async def handle_text(msg: Message):
     if msg.from_user.id in profiles and profiles[msg.from_user.id]["step"] == "text":
         lines = msg.text.strip().split("\n")
         if len(lines) != 8:
-            return await msg.answer("Invia esattamente 8 righe.")
+            return await msg.answer("⚠️ Invia esattamente 8 righe.")
         keys = ["name", "age", "city", "nationality", "dates", "availability", "preferences", "whatsapp"]
         data = dict(zip(keys, lines))
         profiles[msg.from_user.id].update(data)
         profiles[msg.from_user.id]["step"] = "photos"
-        await msg.answer("Ora invia 5 foto (tutte insieme).")
+        await msg.answer("✅ Ora invia 5 foto tutte insieme (album).")
 
 @router.message(F.media_group_id & F.photo)
 async def handle_album(msg: Message):
@@ -56,18 +48,14 @@ async def handle_album(msg: Message):
 async def finalize(msg: Message):
     user_id = msg.from_user.id
     if user_id not in profiles or profiles[user_id]["step"] != "photos":
-        return await msg.answer("Nessun profilo in corso.")
+        return await msg.answer("⚠️ Nessun profilo in corso.")
     # Найти фото по последнему альбому
     last_album = list(photos.values())[-1]
     if len(last_album) != 5:
-        return await msg.answer("Devi inviare esattamente 5 foto.")
+        return await msg.answer("⚠️ Devi inviare esattamente 5 foto.")
     data = profiles.pop(user_id)
-    text = f"👤 <b>{data['name']}, {data['age']}</b>
-"
-    text += f"📍 {data['city']}
-📅 {data['dates']}
-✨ {data['preferences']}
-"
+    text = f"👤 <b>{data['name']}, {data['age']}</b>\n"
+    text += f"📍 {data['city']}\n📅 {data['dates']}\n✨ {data['preferences']}\n"
     text += f"<b>WhatsApp:</b> <a href='https://wa.me/{data['whatsapp'].replace('+','')}'>Contatta</a>"
 
     kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -78,4 +66,3 @@ async def finalize(msg: Message):
     media = [InputMediaPhoto(media=ph) for ph in last_album]
     await msg.answer_media_group(media)
     await msg.answer(text, reply_markup=kb, disable_web_page_preview=True)
-await msg.answer("Invia 8 righe:\nNome\nEtà\nCittà\nNazionalità\nDate\nDisponibilità\nPreferenze\nWhatsApp")
