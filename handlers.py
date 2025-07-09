@@ -1,68 +1,112 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, FSInputFile, InputMediaPhoto, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
-from config import ADMINS, CITIES
+from config import ADMINS, CITIES, CHANNEL_LINK
 from keyboards import city_keyboard
-import json
+import json, os
+import sqlite3
 
 router = Router()
-profiles = {}
-photos = {}
+user_states = {}
+user_photos = {}
 
 def register_handlers(dp, bot):
     dp.include_router(router)
 
+# Команда /start
 @router.message(Command("start"))
 async def start_cmd(msg: Message):
     await msg.answer("📍 Seleziona una città:", reply_markup=city_keyboard())
 
+# Выбор города
+@router.callback_query(F.data.startswith("city:"))
+async def city_selected(callback: CallbackQuery):
+    city = callback.data.split(":")[1]
+    conn = sqlite3.connect("data/bot.db")
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM profiles WHERE city=? AND active=1 ORDER BY created_at DESC", (city,))
+    profiles = cur.fetchall()
+    conn.close()
+
+    if not profiles:
+        await callback.message.answer("❌ Nessun profilo disponibile in questa città. Nuovi arrivi in arrivo, resta sintonizzato!")
+        return
+
+    for profile in profiles:
+        name, age, _, city, _, _, preferences, whatsapp, photos, *_ = profile[1:]
+        text = f"👤 <b>{name}, {age}</b>\n📍 {city}\n✨ {preferences}\n"
+        text += f"<b>WhatsApp:</b> <a href='https://wa.me/{whatsapp.replace('+','')}'>Contatta</a>"
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🌟 Pulizia", callback_data=f"rate:{profile[0]}:Pulizia"),
+             InlineKeyboardButton(text="🍷 Servizio", callback_data=f"rate:{profile[0]}:Servizio"),
+             InlineKeyboardButton(text="💅 Bellezza", callback_data=f"rate:{profile[0]}:Bellezza")]
+        ])
+        media = [InputMediaPhoto(media=ph) for ph in profile[8].split(";")]
+        await callback.message.answer_media_group(media)
+        await callback.message.answer(text, reply_markup=kb, disable_web_page_preview=True)
+
+# Команда /newprofile (только для админа)
 @router.message(Command("newprofile"))
 async def new_profile(msg: Message):
     if msg.from_user.id not in ADMINS:
         return
     await msg.answer("Invia 8 righe:\nNome\nEtà\nCittà\nNazionalità\nDate\nDisponibilità\nPreferenze\nWhatsApp")
-    profiles[msg.from_user.id] = {"step": "text"}
+    user_states[msg.from_user.id] = {"step": "text"}
 
-@router.message(F.text & F.from_user.id.in_(ADMINS))
+# Обработка текста анкеты
+@router.message(F.text)
 async def handle_text(msg: Message):
-    if msg.from_user.id in profiles and profiles[msg.from_user.id]["step"] == "text":
+    if msg.from_user.id in user_states and user_states[msg.from_user.id]["step"] == "text":
         lines = msg.text.strip().split("\n")
         if len(lines) != 8:
             return await msg.answer("⚠️ Invia esattamente 8 righe.")
         keys = ["name", "age", "city", "nationality", "dates", "availability", "preferences", "whatsapp"]
         data = dict(zip(keys, lines))
-        profiles[msg.from_user.id].update(data)
-        profiles[msg.from_user.id]["step"] = "photos"
+        user_states[msg.from_user.id].update(data)
+        user_states[msg.from_user.id]["step"] = "photos"
         await msg.answer("✅ Ora invia 5 foto tutte insieme (album).")
 
+# Приём фото
 @router.message(F.media_group_id & F.photo)
 async def handle_album(msg: Message):
-    user_id = msg.from_user.id
-    if user_id in profiles and profiles[user_id]["step"] == "photos":
-        media_id = str(msg.media_group_id)
-        if media_id not in photos:
-            photos[media_id] = []
-        photos[media_id].append(msg.photo[-1].file_id)
+    uid = msg.from_user.id
+    media_id = msg.media_group_id
+    if uid in user_states and user_states[uid]["step"] == "photos":
+        if uid not in user_photos:
+            user_photos[uid] = []
+        user_photos[uid].append(msg.photo[-1].file_id)
 
+# Команда /done завершает анкету
 @router.message(Command("done"))
 async def finalize(msg: Message):
-    user_id = msg.from_user.id
-    if user_id not in profiles or profiles[user_id]["step"] != "photos":
+    uid = msg.from_user.id
+    if uid not in user_states or user_states[uid]["step"] != "photos":
         return await msg.answer("⚠️ Nessun profilo in corso.")
-    # Найти фото по последнему альбому
-    last_album = list(photos.values())[-1]
-    if len(last_album) != 5:
-        return await msg.answer("⚠️ Devi inviare esattamente 5 foto.")
-    data = profiles.pop(user_id)
-    text = f"👤 <b>{data['name']}, {data['age']}</b>\n"
-    text += f"📍 {data['city']}\n📅 {data['dates']}\n✨ {data['preferences']}\n"
-    text += f"<b>WhatsApp:</b> <a href='https://wa.me/{data['whatsapp'].replace('+','')}'>Contatta</a>"
 
+    if uid not in user_photos or len(user_photos[uid]) != 5:
+        return await msg.answer("⚠️ Devi inviare esattamente 5 foto (album).")
+
+    data = user_states.pop(uid)
+    photos = user_photos.pop(uid)
+    photos_str = ";".join(photos)
+
+    # Сохраняем в базу
+    conn = sqlite3.connect("data/bot.db")
+    cur = conn.cursor()
+    cur.execute("INSERT INTO profiles (name, age, city, nationality, dates, availability, preferences, whatsapp, photos) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (data["name"], data["age"], data["city"], data["nationality"], data["dates"], data["availability"], data["preferences"], data["whatsapp"], photos_str))
+    conn.commit()
+    profile_id = cur.lastrowid
+    conn.close()
+
+    # Публикуем
+    text = f"👤 <b>{data['name']}, {data['age']}</b>\n📍 {data['city']}\n📅 {data['dates']}\n✨ {data['preferences']}\n"
+    text += f"<b>WhatsApp:</b> <a href='https://wa.me/{data['whatsapp'].replace('+','')}'>Contatta</a>"
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🌟 Pulizia", callback_data="rate:Pulizia"),
-         InlineKeyboardButton(text="🍷 Servizio", callback_data="rate:Servizio"),
-         InlineKeyboardButton(text="💅 Bellezza", callback_data="rate:Bellezza")]
+        [InlineKeyboardButton(text="🌟 Pulizia", callback_data=f"rate:{profile_id}:Pulizia"),
+         InlineKeyboardButton(text="🍷 Servizio", callback_data=f"rate:{profile_id}:Servizio"),
+         InlineKeyboardButton(text="💅 Bellezza", callback_data=f"rate:{profile_id}:Bellezza")]
     ])
-    media = [InputMediaPhoto(media=ph) for ph in last_album]
+    media = [InputMediaPhoto(media=ph) for ph in photos]
     await msg.answer_media_group(media)
     await msg.answer(text, reply_markup=kb, disable_web_page_preview=True)
