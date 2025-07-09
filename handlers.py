@@ -78,3 +78,4 @@ async def finalize(msg: Message):
     media = [InputMediaPhoto(media=ph) for ph in last_album]
     await msg.answer_media_group(media)
     await msg.answer(text, reply_markup=kb, disable_web_page_preview=True)
+await msg.answer("Invia 8 righe:\nNome\nEtà\nCittà\nNazionalità\nDate\nDisponibilità\nPreferenze\nWhatsApp")
