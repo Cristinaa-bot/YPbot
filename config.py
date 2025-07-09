@@ -1,4 +1,6 @@
-API_TOKEN = "8088868464:AAFCwP2LdXp-xff38AZQE18B8DJiPpXcOgk"
-ADMINS = [6774952360, 7273958700, 7457586608]
-CITIES = ["Milano", "Roma", "Firenze"]
-CHANNEL_LINK = "https://t.me/+YnSqvMlaioswZWY8"
+import os
+
+API_TOKEN = os.getenv("API_TOKEN")
+ADMINS = list(map(int, os.getenv("ADMINS").split(",")))
+CITIES = os.getenv("CITIES").split(",")
+CHANNEL_LINK = os.getenv("CHANNEL_LINK")
