@@ -1,34 +1,23 @@
 import sqlite3
 
-def init_db():
-    conn = sqlite3.connect("data/bot.db")
-    cur = conn.cursor()
+DB_PATH = "data/profiles.db"
 
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS profiles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        age TEXT,
-        city TEXT,
-        nationality TEXT,
-        dates TEXT,
-        availability TEXT,
-        preferences TEXT,
-        whatsapp TEXT,
-        photos TEXT,
-        active INTEGER DEFAULT 1,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
+async def create_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            text TEXT,
+            city TEXT
+        )
     """)
-
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS ratings (
-        user_id INTEGER,
-        profile_id INTEGER,
-        category TEXT,
-        PRIMARY KEY (user_id, profile_id, category)
-    )
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS photos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profile_id INTEGER,
+            file_id TEXT
+        )
     """)
-
     conn.commit()
     conn.close()
