@@ -2,7 +2,7 @@ import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.types import BotCommand
 from aiogram.enums import ParseMode
-from aiogram.client.default import DefaultBotProperties
+bot = Bot(token=API_TOKEN, parse_mode="HTML")
 
 from config import API_TOKEN
 from handlers import router as profile_router
