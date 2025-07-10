@@ -105,7 +105,6 @@ async def finish_profile(msg: types.Message):
     del user_profiles[msg.from_user.id]
     del user_photos[media_group_id]
 
-
     # Сохраняем в базу
     conn = sqlite3.connect("data/bot.db")
     cur = conn.cursor()
