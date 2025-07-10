@@ -78,17 +78,33 @@ async def handle_album(msg: Message):
 
 # Команда /done завершает анкету
 @router.message(Command("done"))
-async def finalize(msg: Message):
-    uid = msg.from_user.id
-    if uid not in user_states or user_states[uid]["step"] != "photos":
-        return await msg.answer("⚠️ Nessun profilo in corso.")
+async def finish_profile(msg: types.Message):
+    if msg.from_user.id not in user_profiles:
+        await msg.answer("❗️Nessun profilo in corso.")
+        return
 
-    if uid not in user_photos or len(user_photos[uid]) != 5:
-        return await msg.answer("⚠️ Devi inviare esattamente 5 foto (album).")
+    media_group_id = user_profiles[msg.from_user.id].get("media_group_id")
+    photos = user_photos.get(media_group_id, [])
 
-    data = user_states.pop(uid)
-    photos = user_photos.pop(uid)
-    photos_str = ";".join(photos)
+    if not media_group_id or len(photos) != 5:
+        await msg.answer("❗️Invia esattamente 5 foto come album prima di completare.")
+        return
+
+    profile_text = user_profiles[msg.from_user.id]["text"]
+    lines = profile_text.strip().split("\n")
+    city = lines[2].strip()
+
+    profile_id = save_profile(profile_text, photos, city)
+
+    media = [types.InputMediaPhoto(media=p) for p in photos]
+    await msg.bot.send_media_group(msg.chat.id, media)
+    await msg.answer(profile_text, reply_markup=get_vote_keyboard(profile_id))
+    await msg.answer("✅ Profilo pubblicato.")
+
+    # Очистка
+    del user_profiles[msg.from_user.id]
+    del user_photos[media_group_id]
+
 
     # Сохраняем в базу
     conn = sqlite3.connect("data/bot.db")
