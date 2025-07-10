@@ -1,3 +1,4 @@
+from aiogram import types
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InputMediaPhoto, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
