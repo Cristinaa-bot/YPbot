@@ -6,8 +6,7 @@ from keyboards import get_vote_keyboard
 
 router = Router()
 
-user_profiles = {}     # {user_id: {"step": ..., "text": ..., "media_group_id": ...}}
-media_groups = {}      # {media_group_id: [file_id, ...]}
+user_profiles = {}  # {user_id: {"step": ..., "text": ..., "photo": ...}}
 
 @router.message(Command("start"))
 async def start(msg: types.Message):
@@ -27,8 +26,7 @@ async def show_profiles(msg: types.Message):
         return
 
     for prof in profiles:
-        media = [types.InputMediaPhoto(media=photo) for photo in prof['photos']]
-        await msg.bot.send_media_group(msg.chat.id, media)
+        await msg.bot.send_photo(chat_id=msg.chat.id, photo=prof["photo"])
         await msg.answer(prof["text"], reply_markup=get_vote_keyboard(prof["id"]))
 
 @router.message(Command("newprofile"))
@@ -45,46 +43,37 @@ async def get_text(msg: types.Message):
         await msg.answer("❗️Invia esattamente 8 righe.")
         return
     user_profiles[msg.from_user.id]["text"] = msg.text
-    user_profiles[msg.from_user.id]["step"] = "photos"
-    await msg.answer("📸 Ora invia 5 foto come album.")
+    user_profiles[msg.from_user.id]["step"] = "photo"
+    await msg.answer("📸 Ora invia una foto.")
 
-@router.message(F.media_group_id, F.photo)
-async def album_photo(msg: types.Message):
-    user_id = msg.from_user.id
-    if user_id not in user_profiles or user_profiles[user_id]["step"] != "photos":
+@router.message(F.photo)
+async def get_photo(msg: types.Message):
+    uid = msg.from_user.id
+    if uid not in user_profiles or user_profiles[uid]["step"] != "photo":
         return
-
-    mgid = msg.media_group_id
-    if mgid not in media_groups:
-        media_groups[mgid] = []
-    media_groups[mgid].append(msg.photo[-1].file_id)
-
-    user_profiles[user_id]["media_group_id"] = mgid
+    photo_id = msg.photo[-1].file_id
+    user_profiles[uid]["photo"] = photo_id
+    await msg.answer("✅ Foto ricevuta. Ora invia /done per pubblicare.")
 
 @router.message(Command("done"))
-async def finish(msg: types.Message):
+async def publish(msg: types.Message):
     uid = msg.from_user.id
     if uid not in user_profiles:
         await msg.answer("❗️Nessun profilo in corso.")
         return
 
     profile = user_profiles[uid]
-    mgid = profile.get("media_group_id")
-    photos = media_groups.get(mgid, [])
-
-    if not photos or len(photos) != 5:
-        await msg.answer("❗️Invia esattamente 5 foto come album prima di /done.")
+    if "photo" not in profile:
+        await msg.answer("❗️Manca la foto.")
         return
 
-    profile_text = profile["text"]
-    city = profile_text.split("\n")[2].strip()
-    profile_id = save_profile(profile_text, photos, city)
+    text = profile["text"]
+    photo = profile["photo"]
+    city = text.split("\n")[2].strip()
+    profile_id = save_profile(text, photo, city)
 
-    media = [types.InputMediaPhoto(photo) for photo in photos]
-    await msg.bot.send_media_group(chat_id=msg.chat.id, media=media)
-    await msg.answer(profile_text, reply_markup=get_vote_keyboard(profile_id))
+    await msg.bot.send_photo(chat_id=msg.chat.id, photo=photo)
+    await msg.answer(text, reply_markup=get_vote_keyboard(profile_id))
     await msg.answer("✅ Profilo pubblicato.")
 
-    # Очистка
     del user_profiles[uid]
-    del media_groups[mgid]
