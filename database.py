@@ -9,14 +9,8 @@ async def create_db():
         CREATE TABLE IF NOT EXISTS profiles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             text TEXT,
+            photo TEXT,
             city TEXT
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS photos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            profile_id INTEGER,
-            file_id TEXT
         )
     """)
     conn.commit()
